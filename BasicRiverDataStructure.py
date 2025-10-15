@@ -3,6 +3,7 @@
 # Class to provide a simple interface to manage a list of objects created from a pandas dataframe
 
 import pandas as pd
+from rdp import rdp
 
 class Databrowser():
     # This class create a private list of objects from a pandas dataframe (one row = one instance in the list)
@@ -61,6 +62,30 @@ class Databrowser():
             list.append(dict)
         return pd.DataFrame(list)
 
+    def reduce_bedpoints_RDP(self, epsilon):
+        # Reduce the number of points in the list using the Ramer-Douglas-Peucker algorithm
+        # Only the points with attribute 'z' are considered
+        # The attribute 'z' is required for this function to work
+        list_points = []
+        for obj in self._listobj:
+            list_points.append([obj.dist, obj.z])
+        reduced_points = rdp(list_points, epsilon=epsilon)
+        # Create a new list with only the reduced points
+        newlistobj = []
+        for point in reduced_points:
+            for obj in self._listobj:
+                if obj.dist == point[0] and obj.z == point[1]:
+                    newlistobj.append(obj)
+                    break
+        # Create a new Databrowser instance from the reduced list
+        # Convert newlistobj to a DataFrame
+        if len(newlistobj) == 0:
+            return Databrowser(pd.DataFrame(columns=[field for field in self._listobj[0].__dict__.keys()]))
+        data = []
+        for obj in newlistobj:
+            data.append(obj.__dict__)
+        reduced_df = pd.DataFrame(data)
+        return Databrowser(reduced_df)
 
 class Dataobj():
     # Empty class that is used by the Databrowser to populate its list
