@@ -133,7 +133,7 @@ def cs_normalsolver(cs_up, cs_down):
 
         if y < cs_up.ycrit_validation:
             # constraint computation, so that the flow is never supercritical
-            return 9999
+            return float("inf")
         R = (cs_up.width * y) / (cs_up.width + 2 * y)
         v = cs_up.Q / (cs_up.width * y)
         s = (cs_up.n ** 2 * v ** 2) / (R ** (4. / 3.))
@@ -146,9 +146,11 @@ def cs_normalsolver(cs_up, cs_down):
         dif_energy = abs(dif_energy)
         return dif_energy
 
-    res = minimize(equations, cs_down.ycrit, method='Nelder-Mead', options={'xatol': 1e-3})
+    #res = minimize(equations, cs_down.ycrit, method='Nelder-Mead', options={'xatol': 1e-3})
+    res = minimize_scalar(equations, method='brent', tol=1e-3)
 
-    cs_up.y_validation = res.x[0]
+    #cs_up.y_validation = res.x[0]
+    cs_up.y_validation = res.x
     cs_up.R_validation = (cs_up.width * cs_up.y_validation) / (cs_up.width + 2 * cs_up.y_validation)
     cs_up.v_validation = cs_up.Q / (cs_up.width * cs_up.y_validation)
     cs_up.ws_validation = cs_up.z + cs_up.y_validation
