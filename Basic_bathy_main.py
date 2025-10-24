@@ -15,15 +15,21 @@ if __name__ == "__main__":
 
 
     # Simple synthetic data to test the algorithm
-    # can be replaced by data = pd.read_csv(r'path\to\your\data.csv')
-    # dictdataset = {
-    #     'dist': [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200, 210, 220, 230],
-    #     'z_ws': [8.90, 8.92, 8.91, 8.95, 8.94, 8.92, 8.94, 8.96, 8.95, 8.99, 8.95, 9.95, 9.92, 9.92, 9.93, 9.95, 9.94, 9.94, 9.99, 9.94, 9.96, 9.98, 9.95, 9.99],
-    #     'width': [10]*24,
-    #     'Q': [1]*24,
-    # }
-    # data = Databrowser(pd.DataFrame(dictdataset))
-    df_data = pd.read_csv(r'D:\NRCAN2\temp\DebugTetraTech\BCCR_14_QLidar_20221104.csv')
+    # can be replaced by data provided in a csv file with: df_data = pd.read_csv(r'path\to\your\data.csv')
+    # The input data represent charateristics at points measured along the river:
+    # - dist: a longitudinal distance along the river (from downstream to upstream), situating the point
+    # - z_ws: the water surface elevation, usually extracted from LiDAR data, at a measurement point
+    # - width: the river width at a measurement point (wetted width, extracted from LiDAR data)
+    # - Q: the corresponding discharge (assessed discharge during the LiDAR acquisition)
+    # NB: these four field names are hardcoded in the algorithm and cannot be changed in the provided csv file
+    dictdataset = {
+        'dist': [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200, 210, 220, 230],
+        'z_ws': [8.90, 8.92, 8.91, 8.95, 8.94, 8.92, 8.94, 8.96, 8.95, 8.99, 8.95, 9.95, 9.92, 9.92, 9.93, 9.95, 9.94, 9.94, 9.99, 9.94, 9.96, 9.98, 9.95, 9.99],
+        'width': [10]*24,
+        'Q': [1]*24,
+    }
+    df_data = pd.DataFrame(dictdataset)
+    
     data = Databrowser(df_data)
 
 
@@ -66,3 +72,4 @@ if __name__ == "__main__":
     plt.title('Bed Elevation and Water Surface Profiles')
     plt.legend()
     plt.show()
+
