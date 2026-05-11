@@ -6,9 +6,10 @@ from BasicQuantileRegression import QuantileCarving
 from scipy.stats import norm
 from scipy.optimize import minimize_scalar
 import warnings
+from rdp import rdp
 
 
-def execute_WSsmoothing(datapoints, quantile=0.2, smooth_level=600 , uncertainty_sigma = 300, uncertainty_factor=0.85, slope_sigma=300, slope_factor=2.0):
+def execute_WSsmoothing(datapoints, quantile=0.2, rdp_epsilon=0.01, smooth_level=600 , uncertainty_sigma = 300, uncertainty_factor=0.85, slope_sigma=300, slope_factor=2.0):
 
     # The smoothing process :
     # - Removes bumps in the water surface profile following the quantile carving process of
@@ -19,6 +20,47 @@ def execute_WSsmoothing(datapoints, quantile=0.2, smooth_level=600 , uncertainty
 
     # Quantile carving
     QuantileCarving(datapoints, quantile)
+
+    # Following commented section is for using the adaptive rdp. It needs the modified rdp package.
+    # # Computing the uncertainty of the water surface elevation, which will be used for smoothing.
+    # values = []
+    # unbreached_values = []
+    # distances = []
+    # for cs in datapoints.browse_down_to_up():
+    #     distances.append(cs.dist)
+    #     values.append(cs.ztosmooth)
+    #     unbreached_values.append(cs.z_ws)
+    # distances = np.array(distances)
+    # values = np.array(values)
+    # unbreached_values = np.array(unbreached_values)
+    # carving = unbreached_values - values
+    # local_sigma_vec = np.zeros_like(values)
+    # corrections_vec = np.zeros_like(values)
+    # for i in range(len(values)):
+    #     # Gaussian curve size (sigma) is limited on the edges to avoid mismatch with downstream reaches
+    #     local_sigma = min(smooth_level,
+    #                       (distances[i] - distances[0]) * 5.)  # hardcoded: 5 times the distance to the first point
+    #     local_sigma = max(local_sigma, 10.)  # hardcoded: minimum standard deviation
+    #     local_sigma_vec[i] = local_sigma
+    #     # Compute Gaussian weights using norm.pdf
+    #     weights = norm.pdf(distances, loc=distances[i], scale=uncertainty_sigma)
+    #     weights /= weights.sum()  # Normalize weights
+    #     # Uncertainty is calculated from:
+    #     # - the absolute value of the carving (how much carving is done)
+    #     # - the difference between the elevation and surrounding elevations (how much slope there is).
+    #     # A exponential transformation is applyied to that 0 difference of elevation = 1. The slopfactor is added to put
+    #     # more or less weight on the slope.
+    #     # - The ratio between the carving and the differences between the elevations gives a measure of the uncertainty
+    #     # relative to the slope
+    #     # - Everything is multiplied by the weights from the Gaussian curve and summed to get the final uncertainty
+    #     corrections = sum(np.abs(carving) * weights) ** uncertainty_factor
+    #     corrections_vec[i] = corrections
+    #
+    # # Reduce the number of points
+    # if rdp_epsilon is not None:
+    #     datapoints.reduce_points_RDP("ztosmooth", rdp_epsilon, corrections_vec, resample=True)
+    if rdp_epsilon is not None:
+        datapoints.reduce_points_RDP("ztosmooth", rdp_epsilon, resample=True)
 
     # Smoothing
     values = []
@@ -125,4 +167,5 @@ def execute_WSsmoothing(datapoints, quantile=0.2, smooth_level=600 , uncertainty
         #cs.local_sigma = local_sigma_vec[i]
         i +=1
     return
+
 
