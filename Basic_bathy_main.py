@@ -22,15 +22,16 @@ if __name__ == "__main__":
     #     'width': [10]*24,
     #     'Q': [1]*24,
     # }
-    # data = Databrowser(pd.DataFrame(dictdataset))
-    df_data = pd.read_csv(r'D:\NRCAN2\temp\DebugTetraTech\BCCR_14_QLidar_20221104.csv')
+    #data = Databrowser(pd.DataFrame(dictdataset))
+    df_data = pd.read_csv(r'D:\NRCAN2\TestModifBathyAssessment\Feb2026\TestBBCR14\BCCR_14_QLidar_20221104.csv')
     data = Databrowser(df_data)
 
 
     # Create a smooth and hydraulicaly correct water surface profile
     #   Add the attribute 'ztosmooth' to the data object, which is the water surface elevation to be smoothed (after the quantile carving process)
     #   Add the attribute 'z_smoothed' to the data object, which is the smoothed water surface elevation
-    execute_WSsmoothing(data) # Water surface processing
+    execute_WSsmoothing(data, rdp_epsilon=0.03) # Water surface processing
+    #df_beddata = data.topandasdf(["dist", "z_ws", "ztosmooth", "z_smoothed"])
     # Bathymetry assessment
     #   Add the attribute 'z' to the data object, which is the estimated bed elevation
     #   Other attributes, including the Froude number 'Fr', are also added to the data object
@@ -39,28 +40,29 @@ if __name__ == "__main__":
         ["dist", "z_ws", "ztosmooth", "z_smoothed", "z", "Fr"])  # Return result as pandas dataframe
 
     # Optional: Filter the estimated bed elevation using the Ramer-Douglas-Peucker algorithm
-    data_reduced = data.reduce_bedpoints_RDP(0.1) # Epsilon is the tolerance, in the unit of the elevation (m)
+    #data_reduced = data.reduce_bedpoints_RDP(0.1) # Epsilon is the tolerance, in the unit of the elevation (m)
 
     # Optional: Compute the water surface from the estimated bed elevation, using a conventionnal 1D hydraulic solver)
     #   Add the attribute 'ws_validation' to the data object, which is the water surface elevation computed from the estimated bed elevation
-    downstream_slope = data_reduced.get_first_point().s
-    execute_SimpleHydro(data_reduced, 0.03, downstream_slope)
-    df_beddata_reduced = data_reduced.topandasdf(["dist", "z_ws", "ztosmooth", "z_smoothed", "z", "Fr", "ws_validation"])
+    downstream_slope = data.get_first_point().s
+    execute_SimpleHydro(data, 0.03, downstream_slope)
+    df_beddata = data.topandasdf(["dist", "z_ws", "ztosmooth", "z_smoothed", "z", "Fr", "ws_validation"])
 
     # Save it as a csv
-    df_beddata_reduced.to_csv(r'D:\NRCAN2\temp\DebugTetraTech\BCCR_14_QLidar_20221104_bed.csv', index=False)
+    #df_beddata.to_csv(r'D:\NRCAN2\TestModifBathyAssessment\Feb2026\TestBBCR14\bed_rdpexample.csv', index=False)
 
     # Plot data
     plt.figure(figsize=(12, 6))
+    plt.plot(df_beddata['dist'], df_beddata['z_smoothed'], label='Processed ws', alpha=0.7)
     # Plot original bed elevation
-    plt.plot(df_beddata['dist'], df_beddata['z'], label='Original Bed Elevation', alpha=0.7)
+    plt.plot(df_beddata['dist'], df_beddata['z'], label='Bed Elevation', alpha=0.7)
     # Plot reduced (RDP) bed elevation
-    plt.plot(df_beddata_reduced['dist'], df_beddata_reduced['z'], label='Reduced Bed Elevation (RDP)', marker='o', linestyle='--')
+    #plt.plot(df_beddata_reduced['dist'], df_beddata_reduced['z'], label='Reduced Bed Elevation (RDP)', marker='o', linestyle='--')
     # Plot original water surface
     plt.plot(df_data['dist'], df_data['z_ws'], label='Original Water Surface', color='cyan', alpha=0.5)
     # Plot ws_validation from reduced data
-    if 'ws_validation' in df_beddata_reduced.columns:
-        plt.plot(df_beddata_reduced['dist'], df_beddata_reduced['ws_validation'], label='WS Validation', color='magenta', linestyle=':')
+    if 'ws_validation' in df_beddata.columns:
+        plt.plot(df_beddata['dist'], df_beddata['ws_validation'], label='WS Validation', color='magenta', linestyle=':')
     plt.xlabel('dist')
     plt.ylabel('Elevation (m)')
     plt.title('Bed Elevation and Water Surface Profiles')
