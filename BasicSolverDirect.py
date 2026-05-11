@@ -140,8 +140,8 @@ def cs_normalsolver(cs_up, cs_down):
         h = cs_up.z + y
         h = h + v ** 2 / (2 * g) # add kinetic energy
         # slope calculation:
-        #friction_h = localdist * (s+cs_up.s)/2. # Friction can't be based on the average of slope, it leads to impossible to resolve cases
-        friction_h = localdist * s # Replaced by a friction based and the downstream computed slope
+        friction_h = localdist * (s+cs_down.s_validation)/2.
+        #friction_h = localdist * s # Friction based and the downstream computed slope
         dif_energy = friction_h + h_ref - h
         dif_energy = abs(dif_energy)
         return dif_energy
