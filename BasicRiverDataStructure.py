@@ -4,6 +4,7 @@
 
 import pandas as pd
 from rdp import rdp
+import numpy as np
 
 class Databrowser():
     # This class create a private list of objects from a pandas dataframe (one row = one instance in the list)
@@ -62,30 +63,95 @@ class Databrowser():
             list.append(dict)
         return pd.DataFrame(list)
 
-    def reduce_bedpoints_RDP(self, epsilon):
+    # def reduce_points_RDP(self, field, epsilon, corrections_vec=None, resample=False) # adaptive rdp version
+    def reduce_points_RDP(self, field, epsilon, resample=False):
         # Reduce the number of points in the list using the Ramer-Douglas-Peucker algorithm
-        # Only the points with attribute 'z' are considered
-        # The attribute 'z' is required for this function to work
+        # If resample=True, interpolate back to the original data length
+        # This method modifies the current object in-place
+
+        # Build a list of [dist, value] pairs from the internal list of Dataobj instances.
+        # This is suitable for the rdp package which expects a list of coordinate pairs.
         list_points = []
+        rows = []
+
         for obj in self._listobj:
-            list_points.append([obj.dist, obj.z])
+            # Convert object attributes to a dict row for later reconstruction
+            row = vars(obj).copy()
+            rows.append(row)
+
+            # Extract the two fields needed for RDP (distance and the requested field)
+            x = row.get('dist', None)
+            y = row.get(field, None)
+
+            # Skip points with missing values
+            if x is None or y is None:
+                continue
+            # adaptive rdp version
+            # if corrections_vec is not None:
+            #     list_points.append([x, y, corrections_vec[len(list_points)]])
+            else:
+                list_points.append([x, y])
+
+        # If no valid points, raise error
+        if len(list_points) == 0:
+            raise ValueError(f"No valid points found for field '{field}' to apply RDP.")
+
+        # Store original data length for potential resampling
+        original_length = len(rows)
+
+        # Apply RDP algorithm
         reduced_points = rdp(list_points, epsilon=epsilon)
-        # Create a new list with only the reduced points
-        newlistobj = []
-        for point in reduced_points:
-            for obj in self._listobj:
-                if obj.dist == point[0] and obj.z == point[1]:
-                    newlistobj.append(obj)
-                    break
-        # Create a new Databrowser instance from the reduced list
-        # Convert newlistobj to a DataFrame
-        if len(newlistobj) == 0:
-            return Databrowser(pd.DataFrame(columns=[field for field in self._listobj[0].__dict__.keys()]))
-        data = []
-        for obj in newlistobj:
-            data.append(obj.__dict__)
-        reduced_df = pd.DataFrame(data)
-        return Databrowser(reduced_df)
+        # adaptive rdp version
+        # if corrections_vec is not None:
+        #     reduced_points = [[pt[0], pt[1]] for pt in reduced_points]  # Keep only dist and field for merging
+        reduced_points_df = pd.DataFrame(reduced_points, columns=['dist', field])
+
+        # Recreate original DataFrame from the stored rows
+        original_df = pd.DataFrame(rows)
+
+        # Merge reduced points (only dist) with original to recover all attributes
+        merged = pd.merge(reduced_points_df[['dist']], original_df, on='dist', how='left')
+
+        # Sort by distance
+        merged = merged.sort_values(by='dist').reset_index(drop=True)
+
+        # If resample is True, interpolate back to original length
+        if resample:
+            original_dist = original_df['dist'].values
+            reduced_dist = merged['dist'].values
+
+            # Create a new dataframe with the original distance points
+            resampled = pd.DataFrame({'dist': original_dist})
+
+            # For each column in merged
+            for col in merged.columns:
+                if col == 'dist':
+                    continue
+
+                # Only interpolate the specified field; keep other columns from reduced data
+                if col == field:
+                    # Use numpy interp for linear interpolation on the specified field
+                    interp_values = np.interp(original_dist, reduced_dist, merged[col].values)
+                    resampled[col] = interp_values
+                else:
+                    # For all other columns, use nearest-neighbor assignment or forward-fill
+                    # Map each original distance to the nearest reduced distance
+                    nearest_idx = np.searchsorted(reduced_dist, original_dist, side='left')
+                    nearest_idx = np.clip(nearest_idx, 0, len(reduced_dist) - 1)
+                    resampled[col] = merged[col].iloc[nearest_idx].values
+
+            merged = resampled
+
+        # Convert the resulting dataframe back to Dataobj instances and update self._listobj
+        self._listobj = []
+        for index, row in merged.iterrows():
+            newobj = Dataobj()
+            for field_name in merged.columns:
+                setattr(newobj, field_name, row[field_name])
+            self._listobj.append(newobj)
+        
+
+
 
 class Dataobj():
     # Empty class that is used by the Databrowser to populate its list
