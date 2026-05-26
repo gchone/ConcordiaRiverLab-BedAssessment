@@ -5,6 +5,7 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 
+from CrossSection import RectangularSection, TrapezoidalSection
 from BasicWSSmoothing import *
 from BasicBedAssessment import *
 from BasicRiverDataStructure import *
@@ -30,8 +31,8 @@ if __name__ == "__main__":
     }
     df_data = pd.DataFrame(dictdataset)
 
-    data = Databrowser(df_data)
-
+    #data = Databrowser(df_data, TrapezoidalSection)
+    data = Databrowser(df_data,RectangularSection)
 
     # Create a smooth and hydraulicaly correct water surface profile
     #   Add the attribute 'ztosmooth' to the data object, which is the water surface elevation to be smoothed (after the quantile carving process)
@@ -40,17 +41,17 @@ if __name__ == "__main__":
     execute_WSsmoothing(data, rdp_epsilon=0.02) # Water surface processing
 
     # Bathymetry assessment
-    #   Add the attribute 'z' to the data object, which is the estimated bed elevation
+    #   Add the attribute 'parameter' to the data object, which is the estimated bed elevation
     #   Other attributes, including the Froude number 'Fr', are also added to the data object
     execute_BedAssessment(data, 0.03, 0.00001) # Bathymetry assessment
     df_beddata = data.topandasdf(
-        ["dist", "z_ws", "ztosmooth", "z_smoothed", "z", "Fr"])  # Return result as pandas dataframe
+        ["dist", "z_ws", "ztosmooth", "z_smoothed", "parameter", "Fr"])  # Return result as pandas dataframe
 
     # Optional: Compute the water surface from the estimated bed elevation, using a conventionnal 1D hydraulic solver)
     #   Add the attribute 'ws_validation' to the data object, which is the water surface elevation computed from the estimated bed elevation
     downstream_slope = data.get_first_point().s
     execute_SimpleHydro(data, 0.03, downstream_slope)
-    df_beddata = data.topandasdf(["dist", "z_ws", "ztosmooth", "z_smoothed", "z", "Fr", "ws_validation"])
+    df_beddata = data.topandasdf(["dist", "z_ws", "ztosmooth", "z_smoothed", "parameter", "Fr", "ws_validation"])
 
     # Save it as a csv
     #df_beddata.to_csv(r'D:\NRCAN2\TestModifBathyAssessment\Feb2026\TestBBCR14\bed_rdpexample.csv', index=False)
@@ -58,8 +59,8 @@ if __name__ == "__main__":
     # Plot data
     plt.figure(figsize=(12, 6))
     plt.plot(df_beddata['dist'], df_beddata['z_smoothed'], label='Processed ws', alpha=0.7)
-    # Plot original bed elevation
-    plt.plot(df_beddata['dist'], df_beddata['z'], label='Bed Elevation', alpha=0.7)
+    # Plot bed elevation
+    plt.plot(df_beddata['dist'], df_beddata['parameter'], label='Bed Elevation', alpha=0.7)
     # Plot original water surface
     plt.plot(df_data['dist'], df_data['z_ws'], label='Original Water Surface', color='cyan', alpha=0.5)
     # Plot ws_validation from reduced data

@@ -6,15 +6,17 @@ import pandas as pd
 from rdp import rdp
 import numpy as np
 
+
+
 class Databrowser():
     # This class create a private list of objects from a pandas dataframe (one row = one instance in the list)
 
-    def __init__(self, pandadf):
+    def __init__(self, pandadf, cross_section_class):
         # Create the list and load it with the data from the dataframe
         self._listobj = []
         pandadf = pandadf.sort_values(by='dist') # 'dist' is a required column in the dataframe
         for index, row in pandadf.iterrows():
-            newobj = Dataobj()
+            newobj = cross_section_class()
             for field in list(pandadf):
                 setattr(newobj, field, row[field]) # every column of the dataframe is transformed into an attribute
             self._listobj.append(newobj)
@@ -42,13 +44,11 @@ class Databrowser():
     def __len__(self):
         return len(self._listobj)
 
-    def add_point(self, distance):
-        # Add a new point in the list and return it
-        newobj = Dataobj()
-        newobj.dist = distance
-        self._listobj.append(newobj)
+    def add_point(self, new_cs):
+        # Add a new point in the list
+        self._listobj.append(new_cs)
         self._listobj.sort(key=lambda obj: obj.dist) # the list is sorted again by distance
-        return newobj
+
 
     def topandasdf(self, list_fields):
         # Export the list into a pandas dataframe
@@ -143,9 +143,10 @@ class Databrowser():
             merged = resampled
 
         # Convert the resulting dataframe back to Dataobj instances and update self._listobj
+        cross_section_class = type(self._listobj[0]) if len(self._listobj) > 0 else type('CrossSection', (object,), {})
         self._listobj = []
         for index, row in merged.iterrows():
-            newobj = Dataobj()
+            newobj = cross_section_class()
             for field_name in merged.columns:
                 setattr(newobj, field_name, row[field_name])
             self._listobj.append(newobj)
@@ -153,6 +154,3 @@ class Databrowser():
 
 
 
-class Dataobj():
-    # Empty class that is used by the Databrowser to populate its list
-    pass

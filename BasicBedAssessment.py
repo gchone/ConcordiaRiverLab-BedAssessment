@@ -8,6 +8,8 @@
 #####################################################
 
 import pandas as pd
+
+from CrossSection import CrossSection
 from BasicSolverDirect import *
 
 
@@ -53,17 +55,10 @@ def __recursive_inverse1Dhydro(datapoints, cs, prev_cs, min_slope):
     # Adding a cross-section if the Froude number varies too much (increase by more than 50%)
     if (cs.Fr - prev_cs.Fr) / prev_cs.Fr > 0.5 and localdist > 0.1: # Minimum 10cm between cs
 
-        newcs = datapoints.add_point((cs.dist + prev_cs.dist) / 2.) # Adding a point in the dataset at the right distance
-        newlocaldist = localdist / 2.
         # Linear interpolation of width, discharge and water surface for the new point.
         # Although more accurate spatialization could be done, this is deemed accurate enough
-        a = (cs.width - prev_cs.width) / (0-localdist)
-        newcs.width = a * newlocaldist + cs.width
-        a = (cs.Q - prev_cs.Q) / (0-localdist)
-        newcs.Q = a * newlocaldist + cs.Q
-        a = (cs.z_smoothed - prev_cs.z_smoothed) / (0-localdist)
-        newcs.z_smoothed = a* newlocaldist + cs.z_smoothed
-        newcs.n = cs.n
+        newcs = CrossSection.interpolate(prev_cs, cs)
+        datapoints.add_point(newcs)
         newcs.solver = "regular"
         __recursive_inverse1Dhydro(datapoints, newcs, prev_cs, min_slope) # Compute the bed elevation at the new added cross-section
         newcs.type = 3
