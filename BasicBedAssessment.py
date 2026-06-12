@@ -14,7 +14,7 @@ from BasicSolverDirect import *
 
 
 
-def execute_BedAssessment(datapoints, manning, min_slope):
+def execute_BedAssessment(datapoints, manning, min_slope, oversampling):
 
     # Compute upstream boundary slope
     prev_cs = None
@@ -37,12 +37,12 @@ def execute_BedAssessment(datapoints, manning, min_slope):
         else: # For any other point, use the regular inverse hydraulic solver
             cs.solver = "regular"
             cs.type = 1
-            __recursive_inverse1Dhydro(datapoints, cs, prev_cs, min_slope)
+            __recursive_inverse1Dhydro(datapoints, cs, prev_cs, min_slope, oversampling)
         prev_cs = cs
 
     return
 
-def __recursive_inverse1Dhydro(datapoints, cs, prev_cs, min_slope):
+def __recursive_inverse1Dhydro(datapoints, cs, prev_cs, min_slope, oversampling=True):
     # This function apply the inverse hydraulic solver to computer bed elevation at the current cross-section (cs),
     # knowing the condition at the upstream cross-section (prev_cs)
     # This is done recursively: if, after computing the flow at the cross-section, the Froude number appears to vary too
@@ -53,7 +53,7 @@ def __recursive_inverse1Dhydro(datapoints, cs, prev_cs, min_slope):
     localdist = (prev_cs.dist - cs.dist)
 
     # Adding a cross-section if the Froude number varies too much (increase by more than 50%)
-    if (cs.Fr - prev_cs.Fr) / prev_cs.Fr > 0.5 and localdist > 0.1: # Minimum 10cm between cs
+    if (cs.Fr - prev_cs.Fr) / prev_cs.Fr > 0.5 and localdist > 0.1 and oversampling: # Minimum 10cm between cs
 
         # Linear interpolation of width, discharge and water surface for the new point.
         # Although more accurate spatialization could be done, this is deemed accurate enough
