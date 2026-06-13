@@ -100,6 +100,7 @@ def execute_WSsmoothing(datapoints, quantile=0.2, rdp_epsilon=0.01, smooth_level
         if corrections < 1e-9:
             # If there is no carving, there are no smoothing to be made
             smoothed_values[i] = values[i]
+            sd2 = None
         else:
             weightsslope = norm.pdf(distances, loc=distances[i], scale=slope_sigma)
             weightsslope /= weightsslope.sum()  # Normalize weights
@@ -112,36 +113,40 @@ def execute_WSsmoothing(datapoints, quantile=0.2, rdp_epsilon=0.01, smooth_level
                 # resulting elevation can be lower than the previous one, creating a non-hydraulically valid profile.
                 x_values = distances[0:i - 1]
                 mu1 = distances[i - 1]
-                sd1 = sd2  # sd1 is the previous sd2
-                sd2 = uncertainty * local_sigma
-                mu2 = distances[i]
-                F1 = norm.pdf(x_values, loc=mu1, scale=sd1)
-                F2 = norm.pdf(x_values, loc=mu2, scale=sd2)
-                validpdf = np.all(F1 >= F2)
-                if not validpdf:
-                    # The Gaussian curve is too wide, compared to the previous ones
-                    # We need to reduce the standard deviation of the Gaussian curve in that case.
-                    # We will use the optimization to find the maximum possible standard deviation
-                    restricted[i] = 1
+                if sd2 is not None:
+                    sd1 = sd2  # sd1 is the previous sd2
+                    sd2 = uncertainty * local_sigma
+                    mu2 = distances[i]
+                    F1 = norm.pdf(x_values, loc=mu1, scale=sd1)
+                    F2 = norm.pdf(x_values, loc=mu2, scale=sd2)
+                    validpdf = np.all(F1 >= F2)
+                    if not validpdf:
+                        # The Gaussian curve is too wide, compared to the previous ones
+                        # We need to reduce the standard deviation of the Gaussian curve in that case.
+                        # We will use the optimization to find the maximum possible standard deviation
+                        restricted[i] = 1
 
-                    def objective(tested_sd2):
-                        """Objective function to minimize: we want the negative of sd2 for maximization"""
-                        F1 = norm.pdf(x_values, loc=mu1, scale=sd1)
-                        F2 = norm.pdf(x_values, loc=mu2, scale=tested_sd2)
-                        diff = F1 - F2
-                        if np.any(diff < 0):
-                            return np.inf  # violates the constraint
-                        return -tested_sd2  # maximize sd2
+                        def objective(tested_sd2):
+                            """Objective function to minimize: we want the negative of sd2 for maximization"""
+                            F1 = norm.pdf(x_values, loc=mu1, scale=sd1)
+                            F2 = norm.pdf(x_values, loc=mu2, scale=tested_sd2)
+                            diff = F1 - F2
+                            if np.any(diff < 0):
+                                return np.inf  # violates the constraint
+                            return -tested_sd2  # maximize sd2
 
-                    with warnings.catch_warnings():
-                        warnings.filterwarnings("ignore", category=RuntimeWarning)
-                        result = minimize_scalar(objective, bounds=(0.001, sd2), method='bounded')
-                        if result.success:
-                            sd2 = result.x
-                        else:
-                            # If optimization fails, the best guess is to use the previous sd
-                            sd2 = sd1
-                            restricted[i] = 2
+                        with warnings.catch_warnings():
+                            warnings.filterwarnings("ignore", category=RuntimeWarning)
+                            result = minimize_scalar(objective, bounds=(0.001, sd2), method='bounded')
+                            if result.success:
+                                sd2 = result.x
+                            else:
+                                # If optimization fails, the best guess is to use the previous sd
+                                sd2 = sd1
+                                restricted[i] = 2
+                else:
+                    # no sd2 computed, because there was no carving at the previous point
+                    sd2 = uncertainty * local_sigma
             else:
                 # First point, no previous point to compare
                 sd2 = uncertainty * local_sigma
@@ -152,7 +157,6 @@ def execute_WSsmoothing(datapoints, quantile=0.2, rdp_epsilon=0.01, smooth_level
             smoothed_values[i] = np.sum(weights * values)
 
             # Final check: if the smoothed value is lower than the previous one, we set it to the previous one
-            # It seems to happen sometimes although it should not. I could not find the reason why. Probably a numerical approximation in the optimization.
             if i > 0 and smoothed_values[i] < smoothed_values[i - 1]:
                 smoothed_values[i] = smoothed_values[i - 1]
                 restricted[i] = restricted[i]+10
