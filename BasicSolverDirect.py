@@ -33,59 +33,107 @@ def manning_inversesolver(cs):
     cs.Fr = cs.v / (g * cs.y) ** 0.5
 
 
-def cs_inversesolver(cs_up, cs_down, min_slope):
-    # This function is an inverse 1D hydraulic solver, using Manning's and Bernoulli's equations to computed flow at a
-    # downstream cross-section, knowing the conditions upstream
-    # Inverse problem version (i.e. given ws, find z)
+def cs_solver(cs, min_slope, method, max_delta_y):
+    # This function is an inverse 1D hydraulic solver, using Manning's and Bernoulli's equations, that jointly solves
+    # for the flow depth at up to 3 adjacent cross-sections stored in cs.listtosolve (ordered upstream to downstream),
+    # with cs located at cs.position_in_list.
+    # method: "SIMPLE"/"OVERSAMPLING" only use the pair [neighbour, cs] ; "2-XS" additionally uses the cross-section
+    #   further downstream, jointly solving both intervals for a more robust convergence.
+    # max_delta_y: maximum allowed increase of water depth per meter of distance (used to bound the solver).
 
-    localdist = (cs_up.dist - cs_down.dist)
+    if method != "2-XS" and len(cs.listtosolve) == 3:
+        # Only the immediate neighbour is used, the extra (2-XS) cross-section is discarded
+        cs.listtosolve.pop(2)
 
-    if (cs_up.z_smoothed - cs_down.z_smoothed)/localdist <= min_slope:
-        cs_down.solver = "min_slope"
-        h_ref = cs_up.h + localdist * (min_slope - (cs_up.z_smoothed - cs_down.z_smoothed) / localdist)
+    def equations(y): # the equation(s) to solve, as a python function
+        # For each pair of adjacent cross-sections in cs.listtosolve, the difference between the resultant energy
+        # (potential energy, i.e. water surface elevation, plus kinetic energy, plus energy loss by friction) and the
+        # energy computed at the reference cross-section is computed. This function is used by minimize, which tries
+        # to find the depth(s) y so that the combined misfit is minimal.
+
+        dif_energy = []
+        for i in range(len(cs.listtosolve) - 1):
+
+            cs_tosolve = cs.listtosolve[i + 1]
+            cs_ref = cs.listtosolve[i]
+            localdist = cs_tosolve.localdist_up
+
+            if i == 0:
+                cs_ref.temp_h = cs_ref.h
+                cs_ref.temp_s = cs_ref.s
+
+            if abs(cs_ref.z_smoothed - cs_tosolve.z_smoothed) / localdist <= min_slope:
+                cs_tosolve.solver = "min_slope"
+                h_ref = cs_ref.temp_h + localdist * (min_slope - (cs_ref.z_smoothed - cs_tosolve.z_smoothed) / localdist)
+            else:
+                h_ref = cs_ref.temp_h
+
+            v = cs_tosolve.Q / (cs_tosolve.width * y[i])
+            R = (cs_tosolve.width * y[i]) / (cs_tosolve.width + 2 * y[i])
+            s = (cs_tosolve.n ** 2 * v ** 2) / (R ** (4. / 3.))
+            h = cs_tosolve.z_smoothed
+            h = h + v ** 2 / (2 * g) # add kinetic energy
+            cs_tosolve.temp_h = h
+            cs_tosolve.temp_s = s
+
+            # slope calculation:
+            friction_h = localdist * (s + cs_ref.temp_s) / 2.
+            if len(cs.listtosolve) - 1 == 1:
+                # Friction is based on the downstream computed slope only, when only one interval is solved
+                # (necessary for convergence)
+                friction_h = localdist * s
+
+            dif_energy.append(abs(friction_h + h - h_ref))
+
+        misfit = (sum([e ** 2 for e in dif_energy])) ** 0.5
+        return misfit
+
+
+    # Compute the critical depth at each downstream cross-section in the list
+    for i in range(len(cs.listtosolve) - 1):
+        cs_tmp = cs.listtosolve[i + 1]
+        cs_tmp.ycrit = (cs_tmp.Q / (cs_tmp.width * g ** 0.5)) ** (2. / 3.)
+
+    ycrit = [cs.listtosolve[i + 1].ycrit for i in range(len(cs.listtosolve) - 1)] # initial guess
+
+    # Set up maximum depth limits
+    if max_delta_y is not None:
+        max_y = [max(cs.listtosolve[1].ycrit,
+                     min(cs.listtosolve[0].y * (1 + max_delta_y * cs.localdist_up / 100.), cs.listtosolve[1].width))]
     else:
-        h_ref = cs_up.h
+        max_y = [max(cs.listtosolve[1].ycrit, cs.listtosolve[1].width)]
 
-    # the solver starts at y = y_crit
-    cs_down.ycrit = (cs_down.Q / (cs_down.width * g ** 0.5)) ** (2. / 3.)
+    max_y.extend([cs.listtosolve[i + 1].width for i in range(1, len(cs.listtosolve) - 1)])
+    bounds = [(cs.listtosolve[i + 1].ycrit, max_y[i]) for i in range(len(cs.listtosolve) - 1)]
+    res = minimize(equations, ycrit, method='Nelder-Mead', bounds=bounds,
+                   options={'xatol': 1e-3, 'fatol': 1e-6})
+    cs.solver = "regular"
 
-    def equations(y): # the equation to solve, as a python function
-        # For a given flow depth y, the difference between the resultant energy (potential energy, i.e. water surface
-        # elevation, plus kinetic energy, plus energy loss by friction) and the energy computed upstream is computed.
-        # This function is used by fsolve, that tries to find y so that dif_energy = 0
+    if max_delta_y is not None and res.x[cs.position_in_list - 1] == cs.listtosolve[0].y * max_delta_y * cs.localdist_up / 100.:
+        cs.solver = "max depth gradient"
+    if res.x[cs.position_in_list - 1] == cs.listtosolve[1].width:
+        cs.solver = "max depth"
 
-        if y < cs_down.ycrit:
-            # constraint computation, so that the flow is never supercritical
-            return float('inf')
-        R = (cs_down.width * y) / (cs_down.width + 2 * y)
-        v = cs_down.Q / (cs_down.width * y)
-        s = (cs_down.n ** 2 * v ** 2) / (R ** (4. / 3.))
-        h = cs_down.z_smoothed
-        h = h + v ** 2 / (2 * g) # add kinetic energy
-        # slope calculation:
-        #friction_h = localdist * (s+cs_up.s)/2. # Friction can't be based on the average of slope, it leads to impossible to resolve cases
-        friction_h = localdist * s # Replaced by a friction based and the downstream computed slope
-        dif_energy = friction_h + h - h_ref
-        dif_energy = abs(dif_energy)
-        return dif_energy
+    # If the supercritical flow has a better fit than the subcritical one, the critical depth is retained as the final
+    # answer
+    bounds = [(0, cs.listtosolve[i + 1].ycrit) for i in range(len(cs.listtosolve) - 1)]
+    res_super = minimize(equations, ycrit, method='Nelder-Mead', bounds=bounds,
+                         options={'xatol': 1e-3, 'fatol': 1e-6})
+    res = min([res, res_super], key=lambda r: r.fun)
 
 
-    #res, dict, ier, msg = fsolve(equations, cs_down.ycrit, full_output=True)
-    #res = minimize(equations, cs_down.ycrit, method='Nelder-Mead', options={'xatol': 1e-3})
-    res = minimize_scalar(equations, method='brent', tol=1e-3)
+    cs.y = res.x[cs.position_in_list - 1]
+    if cs.y < cs.ycrit:
+        cs.y = cs.ycrit
+        cs.solver = "critical"
 
-    #cs_down.y = res.x[0]
-    cs_down.y = res.x
-    cs_down.R = (cs_down.width * cs_down.y) / (cs_down.width + 2 * cs_down.y)
-    cs_down.v = cs_down.Q / (cs_down.width * cs_down.y)
-    cs_down.z = cs_down.z_smoothed - cs_down.y
-    cs_down.s = (cs_down.n ** 2 * cs_down.v ** 2) / (cs_down.R ** (4. / 3.))
-
-    cs_down.h = cs_down.z_smoothed
-
-    cs_down.h = cs_down.h + cs_down.v ** 2 / (2 * g) # add kinetic energy
-
-    cs_down.Fr = cs_down.v / (g * cs_down.y) ** 0.5
+    cs.R = (cs.width * cs.y) / (cs.width + 2 * cs.y)
+    cs.v = cs.Q / (cs.width * cs.y)
+    cs.z = cs.z_smoothed - cs.y
+    cs.s = (cs.n ** 2 * cs.v ** 2) / (cs.R ** (4. / 3.))
+    cs.h = cs.z_smoothed
+    cs.h = cs.h + cs.v ** 2 / (2 * g)  # add kinetic energy
+    cs.Fr = cs.v / (g * cs.y) ** 0.5
 
     return res
 
