@@ -43,7 +43,7 @@ if __name__ == "__main__":
     # Bathymetry assessment
     #   Add the attribute 'parameter' to the data object, which is the estimated bed elevation
     #   Other attributes, including the Froude number 'Fr', are also added to the data object
-    execute_BedAssessment(data, 0.03, 0.00001) # Bathymetry assessment
+    execute_BedAssessment(data, 0.03, 0.00001, oversampling=True) # Bathymetry assessment
     df_beddata = data.topandasdf(
         ["dist", "z_ws", "ztosmooth", "z_smoothed", "parameter", "Fr"])  # Return result as pandas dataframe
 
