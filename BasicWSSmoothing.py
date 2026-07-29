@@ -8,6 +8,16 @@ from scipy.optimize import minimize_scalar
 import warnings
 from rdp import rdp
 
+# Create function to get lower bound for optimization
+# - default value is 0.001, but handles if sd2 is less than the default
+# - lower bound cannot be zero
+# - lower bound must be less than sd2 and lower bound and sd2 cannot be equal
+def get_lower_bound(sd2, default=0.001):
+    lower_bound = default
+    while lower_bound >= sd2:
+        # keep reducing the lower bound by one order of magnitude until it's strictly less than sd2
+        lower_bound = 10 ** (math.floor(math.log10(lower_bound)) - 1)
+    return lower_bound
 
 def execute_WSsmoothing(datapoints, quantile=0.2, rdp_epsilon=0.01, smooth_level=600 , uncertainty_sigma = 300, uncertainty_factor=0.85, slope_sigma=300, slope_factor=2.0):
 
@@ -137,7 +147,7 @@ def execute_WSsmoothing(datapoints, quantile=0.2, rdp_epsilon=0.01, smooth_level
 
                         with warnings.catch_warnings():
                             warnings.filterwarnings("ignore", category=RuntimeWarning)
-                            result = minimize_scalar(objective, bounds=(0.001, sd2), method='bounded')
+                            result = minimize_scalar(objective, bounds=(get_lower_bound(sd2), sd2), method='bounded')
                             if result.success:
                                 sd2 = result.x
                             else:
