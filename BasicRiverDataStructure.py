@@ -146,8 +146,51 @@ class Databrowser():
             for field_name in merged.columns:
                 setattr(newobj, field_name, row[field_name])
             self._listobj.append(newobj)
-        
 
+    def resample_max_to_original(self, original_dist_list, field):
+        # Resample the list back down to only the original distances (original_dist_list), discarding any
+        # point that was added afterwards (e.g. by execute_BedAssessment's oversampling of cross-sections).
+        # Only "field" is carried over from the discarded points: each original point keeps the maximum value
+        # of "field" found either at its own location or at any nearby added point (i.e. any added point that
+        # is closer to it than to any other original point). All other attributes of the original points are
+        # left untouched.
+
+        original_dist_sorted = np.sort(np.array(original_dist_list, dtype=float))
+        original_dist_set = set(original_dist_list)
+
+        current_dist = np.array([obj.dist for obj in self._listobj], dtype=float)
+
+        # Find, for every current point (original or added), the nearest original distance
+        right_idx = np.searchsorted(original_dist_sorted, current_dist)
+        right_idx = np.clip(right_idx, 0, len(original_dist_sorted) - 1)
+        left_idx = np.clip(right_idx - 1, 0, len(original_dist_sorted) - 1)
+        left_dist = original_dist_sorted[left_idx]
+        right_dist = original_dist_sorted[right_idx]
+        nearest_idx = np.where(
+            np.abs(current_dist - left_dist) <= np.abs(current_dist - right_dist), left_idx, right_idx
+        )
+
+        # Compute, for each original distance, the maximum value of "field" among the points assigned to it
+        max_values = {}
+        for obj, idx in zip(self._listobj, nearest_idx):
+            orig_dist = original_dist_sorted[idx]
+            val = getattr(obj, field, None)
+            if val is None:
+                continue
+            if orig_dist not in max_values or val > max_values[orig_dist]:
+                max_values[orig_dist] = val
+
+        # Keep only the points that are genuinely original (exact match on distance) and update their
+        # field with the computed maximum
+        new_list = []
+        for obj in self._listobj:
+            if obj.dist in original_dist_set:
+                if obj.dist in max_values:
+                    setattr(obj, field, max_values[obj.dist])
+                new_list.append(obj)
+
+        new_list.sort(key=lambda o: o.dist)
+        self._listobj = new_list
 
 
 class Dataobj():
