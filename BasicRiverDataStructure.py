@@ -98,7 +98,6 @@ class Databrowser():
 
         # Store original data length for potential resampling
         original_length = len(rows)
-
         # Apply RDP algorithm
         reduced_points = rdp(list_points, epsilon=epsilon)
         # adaptive rdp version
@@ -128,19 +127,17 @@ class Databrowser():
                 if col == 'dist':
                     continue
 
-                # Only interpolate the specified field; keep other columns from reduced data
+                # Only interpolate the specified field; keep other columns at their original values
                 if col == field:
                     # Use numpy interp for linear interpolation on the specified field
                     interp_values = np.interp(original_dist, reduced_dist, merged[col].values)
                     resampled[col] = interp_values
                 else:
-                    # For all other columns, use nearest-neighbor assignment or forward-fill
-                    # Map each original distance to the nearest reduced distance
-                    nearest_idx = np.searchsorted(reduced_dist, original_dist, side='left')
-                    nearest_idx = np.clip(nearest_idx, 0, len(reduced_dist) - 1)
-                    resampled[col] = merged[col].iloc[nearest_idx].values
+                    # For all other columns, restore the original (pre-reduction) values
+                    resampled[col] = original_df[col].values
 
             merged = resampled
+        print(merged)
 
         # Convert the resulting dataframe back to Dataobj instances and update self._listobj
         self._listobj = []
