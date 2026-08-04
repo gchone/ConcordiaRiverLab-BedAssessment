@@ -137,7 +137,6 @@ class Databrowser():
                     resampled[col] = original_df[col].values
 
             merged = resampled
-        print(merged)
 
         # Convert the resulting dataframe back to Dataobj instances and update self._listobj
         self._listobj = []
