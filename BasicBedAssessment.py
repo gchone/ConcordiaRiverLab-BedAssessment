@@ -12,7 +12,7 @@ from BasicSolverDirect import *
 
 
 
-def execute_BedAssessment(datapoints, manning, min_slope, method="2-XS", max_delta_y=40):
+def execute_BedAssessment(datapoints, manning, min_slope, method="OVERSAMPLING", max_delta_y=None):
     # method: "SIMPLE" (each cross-section solved individually with its immediate neighbour only),
     #         "OVERSAMPLING" (default: additional cross-sections are added where the Froude number varies too fast),
     #         "2-XS" (each cross-section is solved jointly with its immediate neighbour AND the next one downstream,
@@ -64,8 +64,7 @@ def execute_BedAssessment(datapoints, manning, min_slope, method="2-XS", max_del
 
     return
 
-def __recursive_inverse1Dhydro(datapoints, cs, prev_cs, min_slope, method, max_delta_y,
-                               working_supercritical=False):
+def __recursive_inverse1Dhydro(datapoints, cs, prev_cs, min_slope, method, max_delta_y):
     # This function applies the inverse hydraulic solver to compute the bed elevation at the current cross-section
     # (cs), knowing the condition at the reference cross-section (prev_cs), which is located upstream of cs during
     # the subcritical pass, and downstream of cs during the supercritical pass.
@@ -85,7 +84,7 @@ def __recursive_inverse1Dhydro(datapoints, cs, prev_cs, min_slope, method, max_d
 
         # cs and prev_cs are, respectively, the downstream and upstream neighbour, or the reverse, depending on the
         # direction the solver is currently working in
-        upstream_pt, downstream_pt = (prev_cs, cs) if not working_supercritical else (cs, prev_cs)
+        upstream_pt, downstream_pt = (prev_cs, cs)
 
         # Linear interpolation of width, discharge and smoothed water surface for the new point.
         # Although more accurate spatialization could be done, this is deemed accurate enough
@@ -108,19 +107,12 @@ def __recursive_inverse1Dhydro(datapoints, cs, prev_cs, min_slope, method, max_d
         newcs.listtosolve = [upstream_pt, newcs]
         newcs.position_in_list = 1
 
-        if not working_supercritical:
-            newcs.type = 3
-            # cs is now adjacent to the newly inserted point instead of prev_cs: refresh its solving neighbourhood
-            cs.listtosolve = [newcs, cs]
-            cs.position_in_list = 1
-            __recursive_inverse1Dhydro(datapoints, newcs, prev_cs, min_slope, method, max_delta_y) # Compute the bed elevation at the new added cross-section
-            __recursive_inverse1Dhydro(datapoints, cs, newcs, min_slope, method, max_delta_y) # Compute the bed elevation at the downstream cross-section cs
-        else:
-            # prev_cs is now adjacent to the newly inserted point instead of cs: refresh its solving neighbourhood
-            prev_cs.listtosolve = [prev_cs, newcs]
-            prev_cs.position_in_list = 0
-            __recursive_inverse1Dhydro(datapoints, newcs, cs, min_slope, method, max_delta_y)
-            __recursive_inverse1Dhydro(datapoints, prev_cs, newcs, min_slope, method, max_delta_y)
+        newcs.type = 3
+        # cs is now adjacent to the newly inserted point instead of prev_cs: refresh its solving neighbourhood
+        cs.listtosolve = [newcs, cs]
+        cs.position_in_list = 1
+        __recursive_inverse1Dhydro(datapoints, newcs, prev_cs, min_slope, method, max_delta_y) # Compute the bed elevation at the new added cross-section
+        __recursive_inverse1Dhydro(datapoints, cs, newcs, min_slope, method, max_delta_y) # Compute the bed elevation at the downstream cross-section cs
 
     return res
 
