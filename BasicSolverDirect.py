@@ -121,7 +121,6 @@ def cs_solver(cs, min_slope, method, max_delta_y):
                          options={'xatol': 1e-3, 'fatol': 1e-6})
     res = min([res, res_super], key=lambda r: r.fun)
 
-
     cs.y = res.x[cs.position_in_list - 1]
     if cs.y < cs.ycrit:
         cs.y = cs.ycrit
@@ -189,7 +188,7 @@ def cs_normalsolver(cs_up, cs_down):
         h = h + v ** 2 / (2 * g) # add kinetic energy
         # slope calculation:
         friction_h = localdist * (s+cs_down.s_validation)/2.
-        #friction_h = localdist * s # Friction based and the downstream computed slope
+        #friction_h = localdist * s # Friction based on the upstream computed slope
         dif_energy = friction_h + h_ref - h
         dif_energy = abs(dif_energy)
         return dif_energy
